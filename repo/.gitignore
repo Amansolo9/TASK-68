@@ -1,0 +1,27 @@
+**/node_modules
+**/vendor
+.env
+.env.backup
+.phpunit.result.cache
+.idea
+.vscode
+.tmp
+
+# Backend
+backend/public/build
+backend/public/hot
+backend/public/storage
+backend/storage/*.key
+backend/storage/app/attachments/*
+backend/storage/app/artifacts/*
+backend/storage/app/quarantine/*
+backend/storage/app/exports/*
+backend/storage/framework/cache/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
+
+# Frontend
+frontend/dist
+
+npm-debug.log
+yarn-error.log

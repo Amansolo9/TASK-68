@@ -1,0 +1,76 @@
+services:
+  # ── MySQL ──────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: "${DB_ROOT_PASSWORD:-rootsecret}"
+      MYSQL_DATABASE: "${DB_DATABASE:-admissions}"
+      MYSQL_USER: "${DB_USERNAME:-admissions}"
+      MYSQL_PASSWORD: "${DB_PASSWORD:-secret}"
+    ports:
+      - "${DB_EXTERNAL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-rootsecret}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  # ── Application (nginx + php-fpm + queue + scheduler) ──
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${APP_PORT:-8000}:80"
+    environment:
+      APP_NAME: "Admissions System"
+      APP_ENV: "${APP_ENV:-local}"
+      APP_DEBUG: "${APP_DEBUG:-true}"
+      APP_URL: "http://localhost:${APP_PORT:-8000}"
+      APP_KEY: "${APP_KEY:-}"
+
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: "${DB_DATABASE:-admissions}"
+      DB_USERNAME: "${DB_USERNAME:-admissions}"
+      DB_PASSWORD: "${DB_PASSWORD:-secret}"
+
+      SESSION_DRIVER: array
+      SESSION_LIFETIME: 120
+      SESSION_TOKEN_SECRET: "${SESSION_TOKEN_SECRET:-docker-dev-session-secret-change-in-production-64chars0000000000}"
+
+      QUEUE_CONNECTION: database
+      CACHE_STORE: file
+      LOG_CHANNEL: stderr
+
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
+
+      FILESYSTEM_DISK: local
+      CAPTCHA_ENABLED: "true"
+      MFA_ISSUER: "Admissions System"
+      MFA_REQUIRED_FOR_ADMIN: "true"
+
+      LOGIN_MAX_ATTEMPTS: 5
+      LOGIN_LOCKOUT_WINDOW_MINUTES: 15
+      LOGIN_LOCKOUT_DURATION_MINUTES: 30
+
+      SLA_HIGH_PRIORITY_HOURS: 2
+      SLA_NORMAL_PRIORITY_HOURS: 24
+      BUSINESS_HOURS_START: "08:00"
+      BUSINESS_HOURS_END: "17:00"
+      BUSINESS_DAYS: "1,2,3,4,5"
+      POLL_INTERVAL_MS: 10000
+      AUDIT_RETENTION_MONTHS: 24
+    volumes:
+      - app_storage:/var/www/html/storage
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
+  app_storage:

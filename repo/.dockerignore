@@ -1,0 +1,33 @@
+.git
+.gitignore
+.vscode
+.idea
+.env
+.env.backup
+.tmp
+
+**/node_modules
+**/vendor
+**/.phpunit.result.cache
+
+# Backend test/storage artifacts
+backend/tests
+backend/phpunit.xml
+backend/storage/logs/*
+backend/storage/framework/cache/data/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
+backend/storage/app/attachments/*
+backend/storage/app/artifacts/*
+backend/storage/app/quarantine/*
+backend/storage/app/exports/*
+backend/public/build
+
+# Frontend tests
+frontend/tests
+
+# Docs
+README.md
+DEPLOYMENT.md
+docker-compose.yml
+run_tests.sh

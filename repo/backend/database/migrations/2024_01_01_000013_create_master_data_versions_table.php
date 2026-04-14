@@ -1,0 +1,34 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('master_data_versions', function (Blueprint $table) {
+            $table->id();
+            $table->string('entity_type', 100);
+            $table->unsignedBigInteger('entity_id');
+            $table->unsignedInteger('version_no');
+            $table->json('before_snapshot')->nullable();
+            $table->json('after_snapshot');
+            $table->string('before_hash', 64)->nullable();
+            $table->string('after_hash', 64);
+            $table->unsignedBigInteger('actor_user_id');
+            $table->string('change_reason', 500)->nullable();
+            $table->timestamp('created_at');
+
+            $table->index(['entity_type', 'entity_id']);
+            $table->unique(['entity_type', 'entity_id', 'version_no']);
+            $table->index('actor_user_id');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('master_data_versions');
+    }
+};
