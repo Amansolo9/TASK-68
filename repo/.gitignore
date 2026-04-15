@@ -8,6 +8,7 @@
 .tmp
 
 # Backend
+backend/composer.lock
 backend/public/build
 backend/public/hot
 backend/public/storage

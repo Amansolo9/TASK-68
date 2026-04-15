@@ -67,7 +67,7 @@ docker_backend_test() {
         -e QUEUE_CONNECTION=sync \
         composer:2 \
         sh -c "
-            composer install --no-interaction --quiet 2>/dev/null
+            composer update --no-interaction --quiet 2>/dev/null
             ./vendor/bin/phpunit --testsuite $suite --colors=always
         "
 }
@@ -79,7 +79,13 @@ local_backend_test() {
     cd "$BACKEND_DIR"
     if [ ! -d vendor ] || [ ! -f vendor/bin/phpunit ]; then
         echo -e "${CYAN}  Installing backend dependencies…${NC}"
-        composer install --no-interaction --quiet
+        # Use --no-lock to avoid lock-file incompatibility across PHP versions
+        if [ -f composer.lock ]; then
+            composer install --no-interaction --quiet 2>/dev/null || \
+            composer update --no-interaction --quiet
+        else
+            composer update --no-interaction --quiet
+        fi
     fi
     ./vendor/bin/phpunit --testsuite "$suite" --colors=always
 }

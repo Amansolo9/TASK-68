@@ -22,7 +22,7 @@ FROM composer:2 AS composer
 
 WORKDIR /build
 COPY backend/composer.json ./
-RUN composer install \
+RUN composer update \
     --no-dev --no-interaction --no-scripts \
     --prefer-dist --optimize-autoloader --ignore-platform-reqs
 
