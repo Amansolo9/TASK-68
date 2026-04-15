@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(bash run_tests.sh unit)",
-      "Bash(docker exec *)"
-    ]
-  }
-}
