@@ -120,8 +120,8 @@ class AuthenticationTest extends TestCase
             'username' => $user->username,
             'password' => 'ValidPassword123!',
         ]);
-        // Returns 403 (CAPTCHA required) or 401 (locked out) depending on check order
-        $this->assertTrue(in_array($response->status(), [401, 403]));
+        // Locked user triggers CAPTCHA_REQUIRED (403) since captcha_required is set
+        $response->assertStatus(403);
     }
 
     public function test_authenticated_session_endpoint(): void

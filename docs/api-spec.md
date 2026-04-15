@@ -94,9 +94,15 @@ Authenticate user and obtain a signed session token.
 ```
 
 **Error Responses:**
-- `401` — Invalid credentials
-- `423` — Account locked (includes `lockout_until`)
-- `422` — CAPTCHA required or invalid
+- `401` — Invalid credentials (code: `INVALID_CREDENTIALS`)
+- `403` — CAPTCHA required (code: `CAPTCHA_REQUIRED`); also returned when account is locked and CAPTCHA is triggered
+- `422` — Validation error (missing username/password)
+- `429` — IP-level rate limit exceeded (code: `RATE_LIMITED`)
+
+**Middleware Groups:**
+- Public routes: `/auth/login`, `/auth/captcha` — no auth required
+- MFA-exempt routes: `/auth/logout`, `/auth/session`, `/mfa/*` — auth required but MFA verification not enforced
+- Protected routes: all other endpoints — require `auth.signed` + `mfa.required` + `log.operation`
 
 ---
 
@@ -918,6 +924,10 @@ List appointments (staff view).
 
 Reschedule an appointment.
 
+**Middleware:** `permission:appointments.book,appointments.manage` (OR logic)
+
+**Authorization:** Object-level — `AppointmentPolicy::reschedule` verifies the caller is the owning applicant or a manager/admin.
+
 **Request Body:**
 
 | Field         | Type    | Required | Description                  |
@@ -927,6 +937,7 @@ Reschedule an appointment.
 | `request_key` | string  | Yes      | New client-generated UUID    |
 
 **Policy:** Applicants: 24 hours before start. Staff with `appointments.override_policy`: no limit.
+**403:** If the caller is not the appointment owner or a manager/admin.
 
 ---
 
@@ -934,13 +945,19 @@ Reschedule an appointment.
 
 Cancel an appointment.
 
+**Middleware:** `permission:appointments.book,appointments.manage` (OR logic)
+
+**Authorization:** Object-level — `AppointmentPolicy::cancel` verifies the caller is the owning applicant or a manager/admin.
+
 **Request Body:**
 
-| Field    | Type   | Required | Description         |
-|----------|--------|----------|---------------------|
-| `reason` | string | Yes      | Cancellation reason |
+| Field      | Type    | Required | Description                              |
+|------------|---------|----------|------------------------------------------|
+| `reason`   | string  | Yes      | Cancellation reason                      |
+| `override` | boolean | No       | Manager/admin policy override (default false) |
 
 **Policy:** Applicants: 12 hours before start. Staff with `appointments.override_policy`: no limit.
+**403:** If the caller is not the appointment owner or a manager/admin.
 
 ---
 

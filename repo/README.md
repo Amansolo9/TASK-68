@@ -49,7 +49,7 @@ repo/
 │   │   └── seeders/               # Demo data seeder
 │   ├── routes/api.php             # 103 API endpoints
 │   ├── tests/
-│   │   ├── unit_tests/            # 4 PHPUnit unit test files
+│   │   ├── unit_tests/            # 7 PHPUnit unit test files
 │   │   └── api_tests/             # 13 PHPUnit feature/API test files
 │   ├── artisan
 │   ├── composer.json
@@ -64,8 +64,8 @@ repo/
 │   │   ├── utils/                 # Axios API client with token injection
 │   │   └── css/
 │   ├── tests/
-│   │   ├── unit_tests/            # 4 Vitest component test files
-│   │   └── e2e/                   # 6 Playwright end-to-end test files
+│   │   ├── unit_tests/            # 9 Vitest component/logic test files
+│   │   └── e2e/                   # 7 Playwright end-to-end test files
 │   ├── package.json
 │   ├── vite.config.js
 │   └── playwright.config.js
@@ -202,11 +202,11 @@ The script is self-sufficient:
 
 | Suite              | Files | Tests | Framework       |
 |--------------------|------:|------:|-----------------|
-| Backend unit       |     4 |    24 | PHPUnit 11      |
+| Backend unit       |     7 |    55 | PHPUnit 11      |
 | Backend API        |    13 |   175 | PHPUnit 11      |
-| Frontend unit      |     4 |    36 | Vitest 1.6      |
-| Frontend e2e       |     6 |    33 | Playwright 1.44 |
-| **Total**          | **27**| **268**|                |
+| Frontend unit      |     9 |    68 | Vitest 1.6      |
+| Frontend e2e       |     7 |    41 | Playwright 1.44 |
+| **Total**          | **36**| **339**|                |
 
 ### Running tests manually
 

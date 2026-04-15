@@ -22,7 +22,7 @@ The architecture follows a client-server model with a Vue.js single-page applica
 
 ### 2.2 Deployment Topology
 
-The application is containerized via Docker Compose. A single Dockerfile provisions PHP-FPM, Nginx (reverse proxy), and Supervisor (process management). The frontend builds into the Laravel `public/build/` directory, served directly by Nginx. No external CDN, cloud service, or internet dependency exists.
+The application is containerized via Docker Compose. A single Dockerfile provisions PHP-FPM, Nginx (reverse proxy), and Supervisor (process management). The frontend builds into the Laravel `backend/public/build/` directory, served directly by Nginx. No external CDN, cloud service, or internet dependency exists.
 
 ### 2.3 Request Flow
 
@@ -80,7 +80,7 @@ The system uses a server-side math-based CAPTCHA rendered via the GD library. Ch
 
 ### 4.1 Role-Based Access Control (RBAC)
 
-Five roles map to static permission sets defined in `config/permissions.php`:
+Five roles map to static permission sets defined in `backend/config/permissions.php`:
 
 | Role       | Key Permissions |
 |------------|----------------|
@@ -159,7 +159,12 @@ Each state transition is permission-gated (submit requires `plans.submit_review`
 - Full version history via `master_data_versions` with before/after JSON snapshots and SHA-256 hashes
 - Data dictionaries for configurable lookups
 
-**Duplicate Detection:** The `DuplicateDetectionService` identifies potential duplicates by normalized name similarity (confidence 0.85) and employee ID exact match (confidence 0.99). Detected pairs are stored in `duplicate_candidates`.
+**Duplicate Detection:** The `DuplicateDetectionService` identifies potential duplicates using three methods:
+- Normalized name + matching DOB (confidence 0.95) — highest for name-based detection
+- Normalized name only, different or missing DOB (confidence 0.70)
+- Employee ID exact match (confidence 0.99)
+
+DOB comparison decrypts values in-memory during detection runs, preserving encryption at rest. Detected pairs are stored in `duplicate_candidates` for steward review.
 
 **Merge Workflow:** Merge requests follow a `proposed → under_review → approved → executed` lifecycle. Execution retires source records with `merged_into_id` pointing to the target; source rows are never physically deleted.
 
@@ -298,3 +303,50 @@ Modals follow a consistent pattern: visibility controlled by a reactive ref, for
 6. **Field-level encryption with per-operation IV** — AES-256-GCM with random IV per encryption provides semantic security for sensitive PII fields.
 7. **Snapshot-based plan versioning** — Published plans capture their full state as JSON, enabling fast comparison and integrity verification without complex join queries.
 8. **Client-generated request keys** — UUID-based idempotency keys with 10-minute TTL prevent double-booking without server-side deduplication infrastructure.
+9. **backend/frontend split** — The codebase is organized into `backend/` (Laravel) and `frontend/` (Vue.js) directories with independent dependency management. The Dockerfile multi-stage build compiles the frontend and copies the output into the backend's `public/build/` directory.
+
+---
+
+## 11. Project Layout
+
+```
+repo/
+├── backend/               # Laravel 11 (PHP 8.2+)
+│   ├── app/               # Controllers, Models, Services, Policies, Middleware
+│   ├── config/            # App, auth, permissions, security configs
+│   ├── database/          # 25 migrations, seeders
+│   ├── routes/api.php     # 103 API endpoints
+│   └── tests/             # unit_tests/ (7 files) + api_tests/ (13 files)
+├── frontend/              # Vue.js 3 SPA
+│   ├── src/               # Pages, components, router, store, utils, CSS
+│   └── tests/             # unit_tests/ (9 files) + e2e/ (7 Playwright files)
+├── docker/                # nginx, supervisor, php.ini, entrypoint.sh
+├── Dockerfile             # 3-stage: node → composer → php-fpm
+├── docker-compose.yml     # app + mysql services
+└── run_tests.sh           # Unified runner: all | backend | frontend | unit | api | e2e
+```
+
+---
+
+## 12. Testing Strategy
+
+### 12.1 Backend Unit Tests (7 files, 55 tests)
+
+Service-level tests with SQLite in-memory DB. Cover: encryption round-trip, session token sign/verify/revoke, audit chain integrity and immutability, field masking by role, ticket SLA computation and overdue detection, appointment booking/cancel/reschedule/no-show edge cases, duplicate detection with name+DOB matching.
+
+### 12.2 Backend API Tests (13 files, 175 tests)
+
+Full HTTP request/response tests through the Laravel test client. Cover: auth flows (login, lockout, CAPTCHA, MFA), RBAC enforcement across all five roles, plan lifecycle (draft→publish→supersede), ticket creation/triage/reassignment/quality-review, appointment booking with idempotency and concurrency, master data CRUD with version history, merge workflow, data quality metrics, CSV export.
+
+### 12.3 Frontend Unit Tests (9 files, 68 tests)
+
+Vitest with jsdom. Three categories:
+- **Mounted component tests** (Login, Dashboard, MfaVerify) — render verification, form validation, submit behavior, error display, redirect logic
+- **Store tests** (AuthStore) — login/logout state management, permission getters, MFA flow
+- **Logic tests** (RouterGuard, Appointments, AdmissionsPlans, TicketsInbox, TicketDetail) — role-based API endpoint selection, policy window calculations, filter behavior
+
+### 12.4 End-to-End Tests (7 files, 41 tests)
+
+Playwright with Chromium against the running Docker stack. Cover: login/logout/MFA UI flows, published plan browsing, ticket submission through UI modal, full ticket lifecycle via API, appointment booking with idempotency, cross-user cancel denial, RBAC enforcement (6 forbidden-path assertions), CAPTCHA end-to-end, audit envelope consistency, manager reassignment with mandatory reason.
+
+All assertions are exact (no permissive multi-status checks). No skip branches. The `run_tests.sh` script auto-clears rate-limit data before e2e runs and starts Docker if needed.

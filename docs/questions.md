@@ -6,7 +6,7 @@
 
 **My Understanding:** A custom signed token is more appropriate than JWT for an offline system since JWT libraries often pull in external dependencies. The token should be compact, self-contained for basic validation, and verifiable against a server-side record to support revocation.
 
-**Solution:** The implementation in `app/Services/SessionTokenService.php` produces a base64-encoded JSON payload containing `token_id`, `user_id`, `issued_at`, `expires_at`, and an HMAC-SHA256 `signature` computed over the other fields using the application key. The `VerifySignedSession` guard in `app/Services/Guards/SignedSessionGuard.php` decodes the token, verifies the signature, checks expiry, and validates the token against the `user_sessions` table. Tokens are transported via the `Authorization: Bearer` header, with a query-parameter fallback (`?_token=`) supported but discouraged. The frontend Axios interceptor in `frontend/src/utils/api.js` attaches the header automatically.
+**Solution:** The implementation in `backend/app/Services/SessionTokenService.php` produces a base64-encoded JSON payload containing `token_id`, `user_id`, `issued_at`, `expires_at`, and an HMAC-SHA256 `signature` computed over the other fields using the application key. The `VerifySignedSession` guard in `backend/app/Services/Guards/SignedSessionGuard.php` decodes the token, verifies the signature, checks expiry, and validates the token against the `user_sessions` table. Tokens are transported via the `Authorization: Bearer` header, with a query-parameter fallback (`?_token=`) supported but discouraged. The frontend Axios interceptor in `frontend/src/utils/api.js` attaches the header automatically.
 
 ---
 
@@ -16,7 +16,7 @@
 
 **My Understanding:** A server-side generated challenge is the only viable approach for a fully offline system. A math-based or text-based challenge rendered as a server-generated image avoids any external service dependency while still deterring automated credential stuffing.
 
-**Solution:** The `CaptchaService` in `app/Services/CaptchaService.php` generates math-based challenges (addition of two random integers) and renders them as PNG images via PHP's GD library. Challenges are stored in the `captcha_challenges` table with a bcrypt-hashed answer and a 5-minute expiry. The `CaptchaController` exposes generation and image retrieval endpoints. The `LoginThrottle` middleware in `app/Http/Middleware/LoginThrottle.php` triggers the CAPTCHA requirement after the configured failure threshold. Challenge images include noise lines and character distortion to resist OCR.
+**Solution:** The `CaptchaService` in `backend/app/Services/CaptchaService.php` generates math-based challenges (addition of two random integers) and renders them as PNG images via PHP's GD library. Challenges are stored in the `captcha_challenges` table with a bcrypt-hashed answer and a 5-minute expiry. The `CaptchaController` exposes generation and image retrieval endpoints. The `LoginThrottle` middleware in `backend/app/Http/Middleware/LoginThrottle.php` triggers the CAPTCHA requirement after the configured failure threshold. Challenge images include noise lines and character distortion to resist OCR.
 
 ---
 
@@ -26,7 +26,7 @@
 
 **My Understanding:** For an on-premises system, the encryption key must be managed locally. Environment variable injection is the standard approach for containerized deployments — the key is set at deployment time and never stored in source control or application configuration files.
 
-**Solution:** The `EncryptionService` in `app/Services/EncryptionService.php` reads the key from the `ENCRYPTION_KEY` environment variable as a hex-encoded 32-byte value. The service uses AES-256-GCM with a random IV per encryption operation, storing the result as base64-encoded JSON containing IV, ciphertext, and authentication tag. The `config/security.php` file references `env('ENCRYPTION_KEY')` and defines which fields (`date_of_birth`, `government_id`, `institutional_id`, `totp_secret`) are encrypted. Key rotation would require a migration script to re-encrypt existing records, which is not yet implemented.
+**Solution:** The `EncryptionService` in `backend/app/Services/EncryptionService.php` reads the key from the `ENCRYPTION_KEY` environment variable as a hex-encoded 32-byte value. The service uses AES-256-GCM with a random IV per encryption operation, storing the result as base64-encoded JSON containing IV, ciphertext, and authentication tag. The `backend/config/security.php` file references `env('ENCRYPTION_KEY')` and defines which fields (`date_of_birth`, `government_id`, `institutional_id`, `totp_secret`) are encrypted. Key rotation would require a migration script to re-encrypt existing records, which is not yet implemented.
 
 ---
 
@@ -46,7 +46,7 @@
 
 **My Understanding:** A cryptographic hash chain provides tamper evidence: each audit entry includes a hash computed over its own data plus the previous entry's hash. Any modification to a historical entry breaks the chain from that point forward, making tampering detectable during verification.
 
-**Solution:** The `AuditService` in `app/Services/AuditService.php` computes `chain_hash = SHA-256(previous_chain_hash | entry_data)` for each new audit entry, with the genesis hash set to the literal string `"genesis"`. The `AuditLog` model in `app/Models/AuditLog.php` enforces immutability at the Eloquent level — `updating()` and `deleting()` boot callbacks throw `RuntimeException`. Chain integrity is verifiable through the `VerifyAuditChain` command and the `GET /api/audit-logs/verify/chain` endpoint, which walks the chain from a given starting point and reports any broken links.
+**Solution:** The `AuditService` in `backend/app/Services/AuditService.php` computes `chain_hash = SHA-256(previous_chain_hash | entry_data)` for each new audit entry, with the genesis hash set to the literal string `"genesis"`. The `AuditLog` model in `backend/app/Models/AuditLog.php` enforces immutability at the Eloquent level — `updating()` and `deleting()` boot callbacks throw `RuntimeException`. Chain integrity is verifiable through the `VerifyAuditChain` command and the `GET /api/audit-logs/verify/chain` endpoint, which walks the chain from a given starting point and reports any broken links.
 
 ---
 
@@ -56,7 +56,7 @@
 
 **My Understanding:** A date-partitioned sequential format balances readability with concurrency: daily counters reset the sequence while keeping numbers short. Database-level uniqueness constraints prevent collisions even under concurrent inserts.
 
-**Solution:** The `TicketService` in `app/Services/TicketService.php` generates ticket numbers in the format `TKT-YYYYMMDD-XXXX`, where `XXXX` is a zero-padded sequential number per day. The `generateTicketNumber()` method queries the max existing sequence for the current date and increments it. The `local_ticket_no` column has a unique index on the `consultation_tickets` table, ensuring database-level collision protection.
+**Solution:** The `TicketService` in `backend/app/Services/TicketService.php` generates ticket numbers in the format `TKT-YYYYMMDD-XXXX`, where `XXXX` is a zero-padded sequential number per day. The `generateTicketNumber()` method queries the max existing sequence for the current date and increments it. The `local_ticket_no` column has a unique index on the `consultation_tickets` table, ensuring database-level collision protection.
 
 ---
 
@@ -66,7 +66,7 @@
 
 **My Understanding:** Business hours should be configurable with sensible defaults. Tickets submitted outside business hours should have their SLA clock start at the next business hour opening. A holiday calendar is desirable but complex to pre-populate; the initial implementation should support configurable business-day rules with holidays as a future enhancement.
 
-**Solution:** The `config/sla.php` file defines `business_hour_start` (default 08:00), `business_hour_end` (default 17:00), and `business_days` (default Mon-Fri, represented as `[1,2,3,4,5]`). The `TicketService.computeSlaDeadline()` method calculates the `first_response_due_at` timestamp by advancing only through business hours. The `RecalculateSla` artisan command runs every 15 minutes to recompute overdue flags. No holiday calendar is pre-loaded; the system supports only business-day rules. All SLA configuration values are overridable via environment variables.
+**Solution:** The `backend/config/sla.php` file defines `business_hour_start` (default 08:00), `business_hour_end` (default 17:00), and `business_days` (default Mon-Fri, represented as `[1,2,3,4,5]`). The `TicketService.computeSlaDeadline()` method calculates the `first_response_due_at` timestamp by advancing only through business hours. The `RecalculateSla` artisan command runs every 15 minutes to recompute overdue flags. No holiday calendar is pre-loaded; the system supports only business-day rules. All SLA configuration values are overridable via environment variables.
 
 ---
 
@@ -86,7 +86,7 @@
 
 **My Understanding:** Declared MIME types are trivially spoofable and should never be trusted alone. The file's magic bytes (file signature) must be verified against the declared type. Files that fail this check should be quarantined rather than silently dropped, preserving evidence for security review.
 
-**Solution:** The `TicketService.validateAttachmentList()` and `processAttachment()` methods in `app/Services/TicketService.php` perform multi-layer validation: (1) check the declared MIME type is in the allowlist (JPEG, PNG), (2) read the file's first bytes and verify magic byte signatures (JPEG: `FF D8 FF`, PNG: `89 50 4E 47`), (3) enforce a 5 MB size limit, and (4) compute a SHA-256 fingerprint of the file contents. Files with mismatched MIME type vs. actual signature are stored with `upload_status = 'quarantined'` and a `quarantine_reason`, rather than being rejected outright. This preserves the file for security investigation while preventing it from being served to users.
+**Solution:** The `TicketService.validateAttachmentList()` and `processAttachment()` methods in `backend/app/Services/TicketService.php` perform multi-layer validation: (1) check the declared MIME type is in the allowlist (JPEG, PNG), (2) read the file's first bytes and verify magic byte signatures (JPEG: `FF D8 FF`, PNG: `89 50 4E 47`), (3) enforce a 5 MB size limit, and (4) compute a SHA-256 fingerprint of the file contents. Files with mismatched MIME type vs. actual signature are stored with `upload_status = 'quarantined'` and a `quarantine_reason`, rather than being rejected outright. This preserves the file for security investigation while preventing it from being served to users.
 
 ---
 
@@ -96,7 +96,7 @@
 
 **My Understanding:** Immutability should be enforced at both the application and data levels. Published versions should capture a snapshot of their complete state to prevent indirect modification through related records. Creating a new version from a published one should deep-copy all programs and tracks.
 
-**Solution:** The `PlanVersionService.transitionState()` method in `app/Services/PlanVersionService.php` captures a full JSON snapshot of the version (including all programs and tracks) in the `snapshot_data` column at publication time, along with a SHA-256 `snapshot_hash`. The `handlePublish()` method also records `published_by`, `published_at`, and creates an integrity check record in `published_artifact_integrity_checks`. The `updateVersion()` method in `AdmissionsPlanController.php` rejects modifications to any version not in `draft` state. When a new version is published, the `handlePublish()` method automatically transitions any previously published version to `superseded` status, ensuring only one published version exists per plan. The `deriveFromPublished()` method deep-copies programs and tracks from the latest published version into a new draft.
+**Solution:** The `PlanVersionService.transitionState()` method in `backend/app/Services/PlanVersionService.php` captures a full JSON snapshot of the version (including all programs and tracks) in the `snapshot_data` column at publication time, along with a SHA-256 `snapshot_hash`. The `handlePublish()` method also records `published_by`, `published_at`, and creates an integrity check record in `published_artifact_integrity_checks`. The `updateVersion()` method in `backend/app/Http/Controllers/Api/AdmissionsPlanController.php` rejects modifications to any version not in `draft` state. When a new version is published, the `handlePublish()` method automatically transitions any previously published version to `superseded` status, ensuring only one published version exists per plan. The `deriveFromPublished()` method deep-copies programs and tracks from the latest published version into a new draft.
 
 ---
 
@@ -116,7 +116,7 @@
 
 **My Understanding:** Name normalization should at minimum lowercase and collapse whitespace. Since DOB is encrypted at rest, direct database-level comparison is not possible without decryption. Employee ID exact matching is more reliable and should carry higher confidence. The system should flag potential duplicates for human review rather than auto-merging.
 
-**Solution:** The `DuplicateDetectionService` in `app/Services/DuplicateDetectionService.php` normalizes names by lowercasing and collapsing whitespace (matching the `normalized_name` column stored on the model). Personnel duplicates are detected by normalized full-name match (confidence 0.85) and employee ID exact match (confidence 0.99). Organization duplicates use normalized name matching. Because DOB values are encrypted, DOB-based matching is supported only when decrypted values are available in memory during the detection run. All detected pairs are stored in `duplicate_candidates` with a confidence score and require human review — no automatic merging occurs.
+**Solution:** The `DuplicateDetectionService` in `backend/app/Services/DuplicateDetectionService.php` normalizes names by lowercasing and collapsing whitespace (matching the `normalized_name` column stored on the model). Personnel duplicates are detected using three methods: (1) normalized name + matching decrypted DOB at confidence 0.95, (2) normalized name only with different or missing DOB at confidence 0.70, and (3) employee ID exact match at confidence 0.99. Organization duplicates use normalized name matching at confidence 0.85. DOB values are encrypted at rest; the detection service decrypts them in-memory during the detection run to enable comparison without compromising storage-level encryption. All detected pairs are stored in `duplicate_candidates` with a confidence score and require human review — no automatic merging occurs.
 
 ---
 
@@ -126,7 +126,7 @@
 
 **My Understanding:** A no-show should permanently consume the slot to prevent gaming the system. The slot was held for the applicant, and the advisor's time was allocated regardless of attendance. If a legitimate dispute arises, an administrator should manually create a new appointment rather than reversing the no-show.
 
-**Solution:** The `AppointmentService.markNoShow()` method in `app/Services/AppointmentService.php` transitions the appointment to `no_show` state and does not restore the slot's `available_qty`. The `no_show_marked_at` timestamp is recorded. The state transition is logged in `appointment_state_history` with the staff actor. There is no reverse-no-show API endpoint; corrections require booking a new appointment.
+**Solution:** The `AppointmentService.markNoShow()` method in `backend/app/Services/AppointmentService.php` transitions the appointment to `no_show` state and does not restore the slot's `available_qty`. The `no_show_marked_at` timestamp is recorded. The state transition is logged in `appointment_state_history` with the staff actor. There is no reverse-no-show API endpoint; corrections require booking a new appointment.
 
 ---
 
@@ -136,7 +136,7 @@
 
 **My Understanding:** The time windows are consumer-facing policy rules designed to protect the institution's scheduling. Staff and managers need the flexibility to make exceptions — for example, rescheduling on behalf of an applicant who calls with an emergency within the 24-hour window.
 
-**Solution:** The `AppointmentService` in `app/Services/AppointmentService.php` enforces the 24-hour reschedule and 12-hour cancel windows only for users with the `appointments.book` permission (applicants). Users with `appointments.manage` (advisors) or `appointments.override_policy` (managers) bypass these time checks. When a staff member overrides the policy, the `override_reason` field on the appointment record captures the justification, and the action is logged in the operation log and appointment state history.
+**Solution:** The `AppointmentService` in `backend/app/Services/AppointmentService.php` enforces the 24-hour reschedule and 12-hour cancel windows only for users with the `appointments.book` permission (applicants). Users with `appointments.manage` (advisors) or `appointments.override_policy` (managers) bypass these time checks. When a staff member overrides the policy, the `override_reason` field on the appointment record captures the justification, and the action is logged in the operation log and appointment state history.
 
 ---
 
@@ -146,7 +146,7 @@
 
 **My Understanding:** A single configurable threshold is appropriate as a starting point, with the expectation that it can be tuned per entity type in the future. 90 days is a reasonable default for master data records — if an organization, personnel, or position record has not been reviewed in 90 days, it may be stale.
 
-**Solution:** The `DataQualityService` in `app/Services/DataQualityService.php` computes timeliness as the ratio of records updated within the last 90 days to total active records. This 90-day window is applied uniformly across organizations and personnel. The metric is computed nightly by the `ComputeDataQuality` command and stored in `data_quality_metrics` for trend reporting. The threshold is not yet externalized to configuration but could be made configurable per entity type in a future iteration.
+**Solution:** The `DataQualityService` in `backend/app/Services/DataQualityService.php` computes timeliness as the ratio of records updated within the last 90 days to total active records. This 90-day window is applied uniformly across organizations and personnel. The metric is computed nightly by the `ComputeDataQuality` command and stored in `data_quality_metrics` for trend reporting. The threshold is not yet externalized to configuration but could be made configurable per entity type in a future iteration.
 
 ---
 
@@ -156,7 +156,7 @@
 
 **My Understanding:** Physical deletion would break referential integrity and audit trails. Logical deletion alone would leave ambiguity about why the record was deactivated. The safest approach is to retain source records with a clear pointer to the merge target, preserving full lineage.
 
-**Solution:** The `MergeService.executeMerge()` method in `app/Services/MergeService.php` sets source records to `retired` status with `merged_into_id` pointing to the target entity. Source rows are never physically deleted. The associated `duplicate_candidates` records are updated to `merged` status. The merge request itself transitions to `executed` with full audit logging. This preserves complete lineage — any historical reference to a retired record can be traced forward to the surviving entity through `merged_into_id`.
+**Solution:** The `MergeService.executeMerge()` method in `backend/app/Services/MergeService.php` sets source records to `retired` status with `merged_into_id` pointing to the target entity. Source rows are never physically deleted. The associated `duplicate_candidates` records are updated to `merged` status. The merge request itself transitions to `executed` with full audit logging. This preserves complete lineage — any historical reference to a retired record can be traced forward to the surviving entity through `merged_into_id`.
 
 ---
 
@@ -166,7 +166,7 @@
 
 **My Understanding:** Most users should see fully masked values. Only users with an explicit sensitive-data permission should see unmasked values. Partial masking (showing trailing digits) provides enough context for identification without full exposure.
 
-**Solution:** The `MaskingService` in `app/Services/MaskingService.php` applies field-specific masking rules defined in `config/security.php`: `date_of_birth` is masked as `**/**/****`, `government_id` as `***-**-{last4}`, and `institutional_id` as `****{last4}`. The `HasMaskedFields` trait applied to models checks whether the requesting user holds the `attachments.view_sensitive` permission — only users with this permission (currently only the `admin` role) see unmasked values. CSV exports via the `ReportingController` apply identical masking rules based on the exporting user's permissions.
+**Solution:** The `MaskingService` in `backend/app/Services/MaskingService.php` applies field-specific masking rules defined in `backend/config/security.php`: `date_of_birth` is masked as `**/**/****`, `government_id` as `***-**-{last4}`, and `institutional_id` as `****{last4}`. The `HasMaskedFields` trait applied to models checks whether the requesting user holds the `attachments.view_sensitive` permission — only users with this permission (currently only the `admin` role) see unmasked values. CSV exports via the `ReportingController` apply identical masking rules based on the exporting user's permissions.
 
 ---
 
@@ -196,4 +196,4 @@
 
 **My Understanding:** In an educational institution, a single person may wear multiple hats — for example, an advisor who is also a data steward. The system should support multiple concurrent role assignments, with permissions unioned across all active roles to provide the broadest access the user is entitled to.
 
-**Solution:** The `user_role_scopes` table supports multiple records per user, each with its own `role`, `department_scope`, and `content_permissions`. The `User` model's permission-checking methods in `app/Models/User.php` union permissions across all active role-scope records. The frontend `useAuthStore` in `frontend/src/store/auth.js` computes the aggregate permission set from all roles. The unique constraint is on `[user_id, role, department_scope]`, allowing the same role to be scoped to different departments.
+**Solution:** The `user_role_scopes` table supports multiple records per user, each with its own `role`, `department_scope`, and `content_permissions`. The `User` model's permission-checking methods in `backend/app/Models/User.php` union permissions across all active role-scope records. The frontend `useAuthStore` in `frontend/src/store/auth.js` computes the aggregate permission set from all roles. The unique constraint is on `[user_id, role, department_scope]`, allowing the same role to be scoped to different departments.
