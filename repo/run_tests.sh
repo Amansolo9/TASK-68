@@ -38,8 +38,8 @@ command -v node &>/dev/null && HAS_NODE=true
 ensure_frontend_deps() {
     cd "$FRONTEND_DIR"
     if [ ! -d node_modules ]; then
-        echo -e "${CYAN}  Installing frontend dependencies…${NC}"
-        npm install --silent 2>&1
+        echo -e "${CYAN}  Installing frontend dependencies via Docker (node:20-alpine)…${NC}"
+        MSYS_NO_PATHCONV=1 docker run --rm -v "$FRONTEND_DIR:/app" -w //app node:20-alpine npm install --silent 2>&1
         echo -e "${GREEN}  Done.${NC}"
     fi
 }
@@ -67,27 +67,12 @@ docker_backend_test() {
         -e QUEUE_CONNECTION=sync \
         composer:2 \
         sh -c "
-            composer update --no-interaction --quiet 2>/dev/null
+            if [ ! -f vendor/autoload.php ]; then
+                echo 'Installing backend dependencies…'
+                composer install --no-interaction --quiet 2>/dev/null || composer update --no-interaction --quiet 2>/dev/null
+            fi
             ./vendor/bin/phpunit --testsuite $suite --colors=always
         "
-}
-
-# ── Backend via local PHP ─────────────────────────────────
-
-local_backend_test() {
-    local suite="$1"
-    cd "$BACKEND_DIR"
-    if [ ! -d vendor ] || [ ! -f vendor/bin/phpunit ]; then
-        echo -e "${CYAN}  Installing backend dependencies…${NC}"
-        # Use --no-lock to avoid lock-file incompatibility across PHP versions
-        if [ -f composer.lock ]; then
-            composer install --no-interaction --quiet 2>/dev/null || \
-            composer update --no-interaction --quiet
-        else
-            composer update --no-interaction --quiet
-        fi
-    fi
-    ./vendor/bin/phpunit --testsuite "$suite" --colors=always
 }
 
 # ── Test suite runners ────────────────────────────────────
@@ -97,11 +82,8 @@ run_backend_suite() {
     local label="$2"
     echo -e "${YELLOW}── $label ──${NC}"
 
-    if [ "$HAS_PHP" = true ]; then
-        local_backend_test "$suite" && pass=$((pass+1)) || fail=$((fail+1))
-    else
-        docker_backend_test "$suite" && pass=$((pass+1)) || fail=$((fail+1))
-    fi
+    # Always use Docker for backend tests — no local PHP/composer required
+    docker_backend_test "$suite" && pass=$((pass+1)) || fail=$((fail+1))
 }
 
 run_backend_unit() { run_backend_suite "Unit" "Backend unit tests"; }
@@ -109,33 +91,30 @@ run_backend_api()  { run_backend_suite "API"  "Backend API tests"; }
 
 run_frontend_unit() {
     echo -e "${YELLOW}── Frontend unit tests ──${NC}"
-    if [ "$HAS_NODE" = false ]; then
-        echo -e "${RED}  Node.js not found — skipping frontend tests.${NC}"
-        fail=$((fail+1))
-        return
-    fi
     ensure_frontend_deps
     cd "$FRONTEND_DIR"
-    npx vitest run --reporter=verbose && pass=$((pass+1)) || fail=$((fail+1))
+    if [ "$HAS_NODE" = true ]; then
+        npx vitest run --reporter=verbose && pass=$((pass+1)) || fail=$((fail+1))
+    else
+        echo -e "${CYAN}  Running frontend unit tests via Docker…${NC}"
+        MSYS_NO_PATHCONV=1 docker run --rm -v "$FRONTEND_DIR:/app" -w //app node:20-alpine \
+            sh -c "npx vitest run --reporter=verbose" && pass=$((pass+1)) || fail=$((fail+1))
+    fi
 }
 
 run_e2e() {
     echo -e "${YELLOW}── E2E tests (Playwright) ──${NC}"
     if [ "$HAS_NODE" = false ]; then
-        echo -e "${RED}  Node.js not found — skipping e2e tests.${NC}"
+        echo -e "${RED}  Node.js not found — skipping e2e tests (requires local Playwright).${NC}"
         fail=$((fail+1))
         return
     fi
     ensure_frontend_deps
     cd "$FRONTEND_DIR"
 
-    # Check if Playwright browsers are installed
-    if ! npx playwright --version &>/dev/null; then
-        echo -e "${CYAN}  Installing Playwright…${NC}"
-        npm install --save-dev @playwright/test 2>&1
-    fi
-    if [ ! -d "$HOME/.cache/ms-playwright" ] && [ ! -d "$APPDATA/ms-playwright" ]; then
-        echo -e "${CYAN}  Installing Playwright browsers…${NC}"
+    # Ensure Playwright browsers are cached
+    if [ ! -d "$HOME/.cache/ms-playwright" ] && [ ! -d "${APPDATA:-/nonexistent}/ms-playwright" ]; then
+        echo -e "${CYAN}  Installing Playwright browsers (one-time setup)…${NC}"
         npx playwright install chromium 2>&1
     fi
 
@@ -144,7 +123,7 @@ run_e2e() {
     if ! curl -s -o /dev/null -w "" "$BASE_URL" 2>/dev/null; then
         echo -e "${CYAN}  App not running at $BASE_URL — starting Docker stack…${NC}"
         cd "$ROOT_DIR"
-        docker compose up -d --wait 2>&1
+        docker-compose up -d --wait 2>&1
         # Wait for app readiness
         local retries=0
         while ! curl -s -o /dev/null "$BASE_URL" 2>/dev/null; do
@@ -178,8 +157,8 @@ echo ""
 echo "============================================================"
 echo "  Admissions System — Test Runner"
 echo "  Filter:   $FILTER"
-echo "  Backend:  $([ "$HAS_PHP" = true ] && echo "local PHP $(php -r 'echo PHP_VERSION;')" || echo "Docker (composer:2)")"
-echo "  Frontend: $([ "$HAS_NODE" = true ] && echo "local Node $(node --version)" || echo "not available")"
+echo "  Backend:  Docker (composer:2)"
+echo "  Frontend: $([ "$HAS_NODE" = true ] && echo "local Node $(node --version)" || echo "Docker (node:20-alpine)")"
 echo "============================================================"
 echo ""
 

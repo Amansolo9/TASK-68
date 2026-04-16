@@ -1,5 +1,7 @@
 # Unified Admissions & Student Services Management System
 
+> **Project type:** Fullstack (Laravel API + Vue.js SPA)
+
 On-premises admissions planning, consultation handling, appointment booking, master data governance, and operational oversight platform built with **Laravel 11**, **Vue.js 3**, and **MySQL 8**.
 
 Zero internet dependency. Runs entirely on-prem.
@@ -9,7 +11,7 @@ Zero internet dependency. Runs entirely on-prem.
 ## Quick Start
 
 ```bash
-docker compose up --build -d
+docker-compose up --build -d
 ```
 
 The app is available at **http://localhost:8000** once the container reports ready (~30 seconds for first-run migrations and seeding).
@@ -25,6 +27,24 @@ The app is available at **http://localhost:8000** once the container reports rea
 | applicant   | ApplicantPassword123! | Applicant          |
 
 > Change all passwords immediately after first login.
+
+### Verify the system is running
+
+```bash
+# 1. Health check — should return JSON with session info or 401
+curl -s http://localhost:8000/api/auth/session | head -c 200
+
+# 2. Login and get a token
+curl -s -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"applicant","password":"ApplicantPassword123!"}' | head -c 300
+
+# 3. Confirm the UI loads
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8000
+# Expected: 200
+```
+
+If all three return responses (401 for unauthenticated session, 200 with token for login, 200 for UI), the system is operational.
 
 ---
 
@@ -191,12 +211,13 @@ All endpoints return the standard envelope:
 ./run_tests.sh api          # Backend API/integration tests only
 ```
 
-The script is self-sufficient:
-- Installs backend deps via Docker (`composer:2` image) if PHP is not available locally
-- Installs frontend deps via `npm install` if `node_modules/` is missing
-- Installs Playwright browsers on first e2e run
-- Starts Docker stack automatically if e2e tests need it
-- Clears rate-limit data before e2e to prevent throttling
+The script is self-sufficient — only Docker is required on the host:
+- Backend tests always run inside a `composer:2` Docker container (in-memory SQLite) — no local PHP or Composer needed
+- Frontend deps install via `node:20-alpine` Docker container when `node_modules/` is missing
+- Frontend unit and E2E tests use local Node.js if available, or Docker fallback
+- E2E auto-starts the Docker stack (`docker-compose up`) if the app is not running
+- Clears rate-limit data before E2E to prevent throttling
+- No manual `composer install` or `npm install` is ever required — the script handles everything via Docker
 
 ### Test Counts
 
@@ -336,7 +357,7 @@ The entrypoint script:
 
 ```bash
 # Start
-docker compose up --build -d
+docker-compose up --build -d
 
 # View logs
 docker logs -f repo-app-1
@@ -349,10 +370,10 @@ docker exec repo-app-1 php artisan audit:verify-chain
 docker exec repo-app-1 php artisan metrics:compute-data-quality
 
 # Rebuild after code changes
-docker compose up --build -d
+docker-compose up --build -d
 
 # Full reset (wipes data)
-docker compose down -v && docker compose up --build -d
+docker-compose down -v && docker-compose up --build -d
 ```
 
 ---

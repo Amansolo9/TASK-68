@@ -246,6 +246,7 @@ vendor/bin/phpunit --filter=AdmissionsPlanTest
 vendor/bin/phpunit --filter=AppointmentTest
 vendor/bin/phpunit --filter=AuditFixesTest
 vendor/bin/phpunit --filter=AcceptanceFixesTest
+vendor/bin/phpunit --filter=EndpointCoverageTest
 ```
 
 ### Frontend tests (Vitest) — run from `frontend/`
